@@ -1,5 +1,11 @@
-import tkinter as tk
-from tkinter import filedialog, ttk, messagebox
+from kivy.uix.boxlayout import BoxLayout
+from kivy.uix.gridlayout import GridLayout
+from kivy.uix.slider import Slider
+from kivy.uix.treeview import TreeView, TreeViewLabel
+from kivy.uix.popup import Popup
+from kivy.properties import ObjectProperty
+from custom_widgets import CustomButton, CustomLabel, CustomTextInput, CustomFileChooser
+
 import os
 import datetime
 from docx import Document
@@ -7,46 +13,63 @@ import win32com.client
 import pythoncom
 import uuid
 
+class DocumentSplitter(BoxLayout):
+    on_split_complete = ObjectProperty(None)
 
-class DocumentSplitter:
-    def __init__(self, master, callback):
-        self.master = master
-        self.callback = callback
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.orientation = 'vertical'
+        self.spacing = 10
+        self.padding = 20
         self.filename = None
         self.title_structure = []
-        self.setup_ui()
 
-    def setup_ui(self):
-        self.upload_button = tk.Button(self.master, text="Upload Word or PDF File", command=self.upload_file)
-        self.upload_button.pack(pady=10)
+        grid = GridLayout(cols=2, spacing=10, size_hint_y=None)
+        grid.bind(minimum_height=grid.setter('height'))
 
-        self.depth_level = tk.IntVar(value=1)
-        self.depth_slider = tk.Scale(self.master, from_=1, to=9, orient=tk.HORIZONTAL, label="Depth Level", 
-                                     variable=self.depth_level, command=self.update_tree)
-        self.depth_slider.pack(pady=10)
+        grid.add_widget(CustomLabel(text="Select File:"))
+        self.upload_button = CustomButton(text="Upload Word or PDF File", on_press=self.show_file_chooser)
+        grid.add_widget(self.upload_button)
 
-        self.tree = ttk.Treeview(self.master)
-        self.tree.heading("#0", text="Title Structure")
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        grid.add_widget(CustomLabel(text="Depth Level:"))
+        self.depth_slider = Slider(min=1, max=9, value=1, step=1, size_hint=(1, None), height=40)
+        self.depth_slider.bind(value=self.update_tree)
+        grid.add_widget(self.depth_slider)
 
-        self.split_button = tk.Button(self.master, text="Split Document and Save", command=self.split_document)
-        self.split_button.pack(pady=10)
+        self.add_widget(grid)
 
-    def upload_file(self):
-        filetypes = [('Word Documents', '*.docx'), ('PDF Files', '*.pdf'), ('All files', '*.*')]
-        filename = filedialog.askopenfilename(title='Open a file', filetypes=filetypes)
-        if filename:
-            self.filename = filename
-            if filename.lower().endswith('.pdf'):
-                word_filename = self.convert_pdf_to_word(filename)
+        self.tree = TreeView(hide_root=True, size_hint_y=None, height=300)
+        self.add_widget(self.tree)
+
+        self.split_button = CustomButton(text="Split Document and Save", on_press=self.split_document)
+        self.add_widget(self.split_button)
+
+    def show_file_chooser(self, instance):
+        content = BoxLayout(orientation='vertical')
+        file_chooser = CustomFileChooser(filters=['*.docx', '*.pdf'])
+        content.add_widget(file_chooser)
+        
+        select_button = CustomButton(text="Select")
+        select_button.bind(on_press=lambda x: self.upload_file(file_chooser.selection))
+        content.add_widget(select_button)
+        
+        popup = Popup(title="Choose a file", content=content, size_hint=(0.9, 0.9))
+        select_button.bind(on_press=popup.dismiss)
+        popup.open()
+
+    def upload_file(self, selection):
+        if selection:
+            self.filename = selection[0]
+            if self.filename.lower().endswith('.pdf'):
+                word_filename = self.convert_pdf_to_word(self.filename)
                 if word_filename:
                     self.filename = word_filename
                 else:
-                    messagebox.showerror("Error", "Failed to convert PDF to Word.")
+                    self.show_error("Failed to convert PDF to Word.")
                     return
             self.analyze_document()
         else:
-            messagebox.showinfo("No file selected", "Please select a file to upload.")
+            self.show_error("No file selected.")
 
     def convert_pdf_to_word(self, pdf_filename):
         try:
@@ -85,13 +108,12 @@ class DocumentSplitter:
 
             self.update_tree()
         except Exception as e:
-            print(f"Error analyzing document: {e}")
-            messagebox.showerror("Error", "Failed to analyze the document.")
+            self.show_error(f"Failed to analyze the document: {str(e)}")
 
-    def update_tree(self, event=None):
-        self.tree.delete(*self.tree.get_children())
-        depth = self.depth_level.get()
-        parent_stack = [""]
+    def update_tree(self, *args):
+        self.tree.clear_widgets()
+        depth = int(self.depth_slider.value)
+        parent_stack = [None]
         last_level = 0
 
         for item in self.title_structure:
@@ -102,16 +124,16 @@ class DocumentSplitter:
                     parent_stack.pop()
                     last_level -= 1
                 parent = parent_stack[-1]
-                current_node = self.tree.insert(parent, 'end', text=text)
+                current_node = self.tree.add_node(TreeViewLabel(text=text), parent)
                 parent_stack.append(current_node)
                 last_level = level
 
-    def split_document(self):
+    def split_document(self, instance):
         if not self.filename:
-            messagebox.showerror("Error", "Please upload a document first.")
+            self.show_error("Please upload a document first.")
             return
 
-        depth = self.depth_level.get()
+        depth = int(self.depth_slider.value)
         try:
             doc = Document(self.filename)
             script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -152,14 +174,20 @@ class DocumentSplitter:
 
             for idx, section in enumerate(sections):
                 title = section['title']
-                # Generate a short unique identifier
                 unique_id = str(uuid.uuid4())[:8]
-                # Use the unique identifier instead of the full title
                 output_filename = os.path.join(output_folder, f"{idx+1}_{unique_id}.docx")
                 section['document'].save(output_filename)
 
-            messagebox.showinfo("Success", f"Document split into {len(sections)} sections and saved in {output_folder}")
-            self.callback(output_folder)  # Notify the main app that splitting is complete
+            self.show_info(f"Document split into {len(sections)} sections and saved in {output_folder}")
+            if self.on_split_complete:
+                self.on_split_complete(self, output_folder)
         except Exception as e:
-            print(f"Error splitting document: {e}")
-            messagebox.showerror("Error", f"An error occurred while splitting the document: {str(e)}")
+            self.show_error(f"An error occurred while splitting the document: {str(e)}")
+
+    def show_error(self, message):
+        popup = Popup(title='Error', content=CustomLabel(text=message), size_hint=(None, None), size=(400, 200))
+        popup.open()
+
+    def show_info(self, message):
+        popup = Popup(title='Information', content=CustomLabel(text=message), size_hint=(None, None), size=(400, 200))
+        popup.open()

@@ -1,31 +1,45 @@
-import tkinter as tk
-from tkinter import ttk
-import os
-from splitter import DocumentSplitter
-from processor import DocumentProcessor
-from merger import DocumentMerger
+# integrated_app.py
+from kivymd.uix.tab import MDTabsBase
+from kivy.lang import Builder
+from kivy.uix.screenmanager import Screen
+from kivymd.uix.screen import MDScreen
+from kivymd.uix.boxlayout import MDBoxLayout
 
-class IntegratedApp:
-    def __init__(self, master):
-        self.master = master
-        master.title("Integrated Document Processor")
-        master.geometry("800x600")
+from splitter import SplitterScreen
+from processor import ProcessorScreen
+from merger import MergerScreen
 
-        self.notebook = ttk.Notebook(master)
-        self.notebook.pack(fill=tk.BOTH, expand=True)
+Builder.load_string('''
+<IntegratedApp>:
+    MDTabs:
+        id: tabs
+        on_tab_switch: root.on_tab_switch(*args)
+        Tab:
+            title: "Splitter"
+            SplitterScreen:
+                id: splitter_screen
+        Tab:
+            title: "Processor"
+            ProcessorScreen:
+                id: processor_screen
+        Tab:
+            title: "Merger"
+            MergerScreen:
+                id: merger_screen
 
-        self.splitter_frame = ttk.Frame(self.notebook)
-        self.processor_frame = ttk.Frame(self.notebook)
-        self.merger_frame = ttk.Frame(self.notebook)
+<Tab>:
+    MDBoxLayout:
+        orientation: 'vertical'
+        MDLabel:
+            id: tab_label
+            text: root.title
+            halign: 'center'
+        
+''')
 
-        self.notebook.add(self.splitter_frame, text="Splitter")
-        self.notebook.add(self.processor_frame, text="Processor")
-        self.notebook.add(self.merger_frame, text="Merger")
+class Tab(MDBoxLayout, MDTabsBase):
+    pass
 
-        self.splitter = DocumentSplitter(self.splitter_frame, self.on_split_complete)
-        self.processor = DocumentProcessor(self.processor_frame)
-        self.merger = DocumentMerger(self.merger_frame)
-
-    def on_split_complete(self, output_folder):
-        self.processor.load_split_files(output_folder)
-        self.notebook.select(1)  # Switch to the Processor tab
+class IntegratedApp(MDScreen):
+    def on_tab_switch(self, instance_tabs, instance_tab, instance_tab_label, tab_text):
+        pass  # You can handle tab switch events here
