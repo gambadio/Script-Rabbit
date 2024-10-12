@@ -4,6 +4,8 @@ import os
 import json
 from anthropic import Anthropic
 from default_prompts import DEFAULT_PROMPTS
+from docx import Document
+
 
 class DocumentProcessor:
     def __init__(self, master):
@@ -37,7 +39,6 @@ class DocumentProcessor:
         button_frame = ttk.Frame(self.master)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Button(button_frame, text="Add Files", command=self.add_files).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Remove Selected", command=self.remove_selected).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Process Files", command=self.process_files).pack(side=tk.LEFT, padx=5)
@@ -69,10 +70,13 @@ class DocumentProcessor:
         else:
             messagebox.showerror("API Key Error", "Please enter an API Key.")
 
-    def add_files(self):
-        files = filedialog.askopenfilenames(filetypes=[("Word Documents", "*.docx"), ("Text Files", "*.txt")])
-        for file in files:
-            self.file_listbox.insert(tk.END, file)
+    def load_split_files(self, folder_path):
+        self.clear_all()
+        for filename in os.listdir(folder_path):
+            if filename.endswith('.docx'):
+                full_path = os.path.join(folder_path, filename)
+                self.file_listbox.insert(tk.END, full_path)
+        self.output_folder.set(os.path.join(folder_path, 'processed'))
 
     def remove_selected(self):
         selection = self.file_listbox.curselection()
@@ -94,7 +98,7 @@ class DocumentProcessor:
 
         files = list(self.file_listbox.get(0, tk.END))
         if not files:
-            messagebox.showerror("Error", "Please add files to process.")
+            messagebox.showerror("Error", "No files to process.")
             return
 
         output_folder = self.output_folder.get()
@@ -102,10 +106,12 @@ class DocumentProcessor:
             messagebox.showerror("Error", "Please select an output folder.")
             return
 
+        os.makedirs(output_folder, exist_ok=True)
+
         for file in files:
             try:
-                with open(file, 'r', encoding='utf-8') as f:
-                    content = f.read()
+                doc = Document(file)
+                content = "\n".join([para.text for para in doc.paragraphs])
                 
                 response = self.anthropic.messages.create(
                     model="claude-3-5-sonnet-20240620",
@@ -149,6 +155,9 @@ class DocumentProcessor:
         save_dict = {k: v for k, v in self.prompts.items() if k not in DEFAULT_PROMPTS}
         with open("saved_prompts.json", "w") as f:
             json.dump(save_dict, f)
+
+# The PromptManager class remains the same as in the previous version
+
 
 class PromptManager(tk.Toplevel):
     def __init__(self, parent, prompts, current_prompt):

@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+import os
 from splitter import DocumentSplitter
 from processor import DocumentProcessor
 from merger import DocumentMerger
@@ -21,6 +22,10 @@ class IntegratedApp:
         self.notebook.add(self.processor_frame, text="Processor")
         self.notebook.add(self.merger_frame, text="Merger")
 
-        self.splitter = DocumentSplitter(self.splitter_frame)
+        self.splitter = DocumentSplitter(self.splitter_frame, self.on_split_complete)
         self.processor = DocumentProcessor(self.processor_frame)
         self.merger = DocumentMerger(self.merger_frame)
+
+    def on_split_complete(self, output_folder):
+        self.processor.load_split_files(output_folder)
+        self.notebook.select(1)  # Switch to the Processor tab

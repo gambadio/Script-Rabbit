@@ -5,10 +5,13 @@ import datetime
 from docx import Document
 import win32com.client
 import pythoncom
+import uuid
+
 
 class DocumentSplitter:
-    def __init__(self, master):
+    def __init__(self, master, callback):
         self.master = master
+        self.callback = callback
         self.filename = None
         self.title_structure = []
         self.setup_ui()
@@ -111,9 +114,9 @@ class DocumentSplitter:
         depth = self.depth_level.get()
         try:
             doc = Document(self.filename)
-            base_dir = os.path.dirname(self.filename)
+            script_dir = os.path.dirname(os.path.abspath(__file__))
             base_name = os.path.splitext(os.path.basename(self.filename))[0]
-            output_folder = os.path.join(base_dir, f"{base_name}_split_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
+            output_folder = os.path.join(script_dir, f"{base_name}_split_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
             os.makedirs(output_folder)
 
             sections = []
@@ -149,11 +152,14 @@ class DocumentSplitter:
 
             for idx, section in enumerate(sections):
                 title = section['title']
-                filename_safe_title = ''.join(c for c in title if c.isalnum() or c in ' _-').rstrip()
-                output_filename = os.path.join(output_folder, f"{idx+1}_{filename_safe_title}.docx")
+                # Generate a short unique identifier
+                unique_id = str(uuid.uuid4())[:8]
+                # Use the unique identifier instead of the full title
+                output_filename = os.path.join(output_folder, f"{idx+1}_{unique_id}.docx")
                 section['document'].save(output_filename)
 
             messagebox.showinfo("Success", f"Document split into {len(sections)} sections and saved in {output_folder}")
+            self.callback(output_folder)  # Notify the main app that splitting is complete
         except Exception as e:
             print(f"Error splitting document: {e}")
-            messagebox.showerror("Error", "An error occurred while splitting the document.")
+            messagebox.showerror("Error", f"An error occurred while splitting the document: {str(e)}")
