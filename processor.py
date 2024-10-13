@@ -5,7 +5,7 @@ import json
 from anthropic import Anthropic
 from default_prompts import DEFAULT_PROMPTS
 from docx import Document
-
+import re
 
 class DocumentProcessor:
     def __init__(self, master):
@@ -39,8 +39,11 @@ class DocumentProcessor:
         button_frame = ttk.Frame(self.master)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
 
+        ttk.Button(button_frame, text="Upload Files", command=self.upload_files).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Remove Selected", command=self.remove_selected).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Move Up", command=self.move_up).pack(side=tk.LEFT, padx=5)
+        ttk.Button(button_frame, text="Move Down", command=self.move_down).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Process Files", command=self.process_files).pack(side=tk.LEFT, padx=5)
 
         output_frame = ttk.Frame(self.master)
@@ -70,12 +73,50 @@ class DocumentProcessor:
         else:
             messagebox.showerror("API Key Error", "Please enter an API Key.")
 
+    def upload_files(self):
+        files = filedialog.askopenfilenames(filetypes=[("Word Documents", "*.docx")])
+        for file in files:
+            self.file_listbox.insert(tk.END, file)
+        self.sort_files()
+
+    def sort_files(self):
+        files = list(self.file_listbox.get(0, tk.END))
+        sorted_files = sorted(files, key=self.extract_number)
+        self.clear_all()
+        for file in sorted_files:
+            self.file_listbox.insert(tk.END, file)
+
+    def extract_number(self, filename):
+        match = re.search(r'^\d+', os.path.basename(filename))
+        return int(match.group()) if match else float('inf')
+
+    def move_up(self):
+        selected_indices = self.file_listbox.curselection()
+        if not selected_indices or selected_indices[0] == 0:
+            return
+        for index in selected_indices:
+            text = self.file_listbox.get(index)
+            self.file_listbox.delete(index)
+            self.file_listbox.insert(index-1, text)
+            self.file_listbox.selection_set(index-1)
+
+    def move_down(self):
+        selected_indices = self.file_listbox.curselection()
+        if not selected_indices or selected_indices[-1] == self.file_listbox.size()-1:
+            return
+        for index in reversed(selected_indices):
+            text = self.file_listbox.get(index)
+            self.file_listbox.delete(index)
+            self.file_listbox.insert(index+1, text)
+            self.file_listbox.selection_set(index+1)
+
     def load_split_files(self, folder_path):
         self.clear_all()
         for filename in os.listdir(folder_path):
             if filename.endswith('.docx'):
                 full_path = os.path.join(folder_path, filename)
                 self.file_listbox.insert(tk.END, full_path)
+        self.sort_files()
         self.output_folder.set(os.path.join(folder_path, 'processed'))
 
     def remove_selected(self):
@@ -155,9 +196,6 @@ class DocumentProcessor:
         save_dict = {k: v for k, v in self.prompts.items() if k not in DEFAULT_PROMPTS}
         with open("saved_prompts.json", "w") as f:
             json.dump(save_dict, f)
-
-# The PromptManager class remains the same as in the previous version
-
 
 class PromptManager(tk.Toplevel):
     def __init__(self, parent, prompts, current_prompt):
