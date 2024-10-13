@@ -7,7 +7,6 @@ import win32com.client
 import pythoncom
 import uuid
 
-
 class DocumentSplitter:
     def __init__(self, master, callback):
         self.master = master
@@ -25,9 +24,25 @@ class DocumentSplitter:
                                      variable=self.depth_level, command=self.update_tree)
         self.depth_slider.pack(pady=10)
 
-        self.tree = ttk.Treeview(self.master)
+        tree_frame = ttk.Frame(self.master)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+        self.tree = ttk.Treeview(tree_frame)
         self.tree.heading("#0", text="Title Structure")
-        self.tree.pack(fill=tk.BOTH, expand=True)
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+
+        tree_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        tree_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+
+        button_frame = ttk.Frame(self.master)
+        button_frame.pack(pady=10)
+
+        self.remove_button = tk.Button(button_frame, text="Remove Selected", command=self.remove_selected)
+        self.remove_button.pack(side=tk.LEFT, padx=5)
+
+        self.restore_button = tk.Button(button_frame, text="Restore All", command=self.restore_all)
+        self.restore_button.pack(side=tk.LEFT, padx=5)
 
         self.split_button = tk.Button(self.master, text="Split Document and Save", command=self.split_document)
         self.split_button.pack(pady=10)
@@ -81,7 +96,7 @@ class DocumentSplitter:
                         level = int(style.replace('Heading ', ''))
                     except:
                         level = 1
-                    self.title_structure.append({'level': level, 'text': text})
+                    self.title_structure.append({'level': level, 'text': text, 'include': True})
 
             self.update_tree()
         except Exception as e:
@@ -97,14 +112,33 @@ class DocumentSplitter:
         for item in self.title_structure:
             level = item['level']
             text = item['text']
+            include = item['include']
             if level <= depth:
                 while level <= last_level:
                     parent_stack.pop()
                     last_level -= 1
                 parent = parent_stack[-1]
-                current_node = self.tree.insert(parent, 'end', text=text)
+                tag = 'included' if include else 'excluded'
+                current_node = self.tree.insert(parent, 'end', text=text, tags=(tag,))
                 parent_stack.append(current_node)
                 last_level = level
+
+        self.tree.tag_configure('excluded', foreground='gray')
+
+    def remove_selected(self):
+        selected_items = self.tree.selection()
+        for item in selected_items:
+            item_text = self.tree.item(item, 'text')
+            for title in self.title_structure:
+                if title['text'] == item_text:
+                    title['include'] = False
+                    break
+        self.update_tree()
+
+    def restore_all(self):
+        for title in self.title_structure:
+            title['include'] = True
+        self.update_tree()
 
     def split_document(self):
         if not self.filename:
@@ -123,6 +157,8 @@ class DocumentSplitter:
             current_doc = None
             current_level = 0
             current_title = ""
+            include_content = False
+            included_titles = [item['text'] for item in self.title_structure if item['include']]
 
             for para in doc.paragraphs:
                 style = para.style.name
@@ -133,33 +169,34 @@ class DocumentSplitter:
                             level = int(style.replace('Heading ', ''))
                         except:
                             level = 1
+                        
                         if level <= depth:
-                            if current_doc:
-                                sections.append({'level': current_level, 'title': current_title, 'document': current_doc})
-                            current_doc = Document()
+                            if text in included_titles:
+                                if current_doc and include_content:
+                                    sections.append({'level': current_level, 'title': current_title, 'document': current_doc})
+                                current_doc = Document()
+                                current_level = level
+                                current_title = text
+                                include_content = True
+                            else:
+                                include_content = False
+                        
+                        if include_content:
                             current_doc.add_paragraph(text, style=style)
-                            current_level = level
-                            current_title = text
-                        else:
-                            if current_doc:
-                                current_doc.add_paragraph(text, style=style)
-                    else:
-                        if current_doc:
-                            current_doc.add_paragraph(text, style=style)
+                    elif include_content and current_doc:
+                        current_doc.add_paragraph(text, style=style)
 
-            if current_doc:
+            if current_doc and include_content:
                 sections.append({'level': current_level, 'title': current_title, 'document': current_doc})
 
             for idx, section in enumerate(sections):
                 title = section['title']
-                # Generate a short unique identifier
                 unique_id = str(uuid.uuid4())[:8]
-                # Use the unique identifier instead of the full title
                 output_filename = os.path.join(output_folder, f"{idx+1}_{unique_id}.docx")
                 section['document'].save(output_filename)
 
             messagebox.showinfo("Success", f"Document split into {len(sections)} sections and saved in {output_folder}")
-            self.callback(output_folder)  # Notify the main app that splitting is complete
+            self.callback(output_folder)
         except Exception as e:
             print(f"Error splitting document: {e}")
             messagebox.showerror("Error", f"An error occurred while splitting the document: {str(e)}")
