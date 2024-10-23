@@ -14,7 +14,7 @@ class DocumentProcessor:
         self.master = master
         self.anthropic = None
         self.prompts = DEFAULT_PROMPTS.copy()
-        self.current_prompt = "Default"
+        self.current_prompt = "Academic_Content_Formatter"
         self.file_paths = []
         self.load_saved_prompts()
         self.setup_ui()
@@ -199,8 +199,12 @@ class PromptManager(tk.Toplevel):
         self.current_prompt = current_prompt
         self.result = None
 
+        self.transient(parent)  # Set parent-child relationship
+        self.grab_set()         # Make window modal
+        self.attributes('-topmost', True)  # Keep window on top
+
         self.title("Prompt Manager")
-        self.geometry("600x400")
+        self.geometry("700x500")
 
         self.create_widgets()
 
