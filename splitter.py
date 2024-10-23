@@ -68,7 +68,8 @@ class DocumentSplitter:
             from_=1,
             to=9,
             orient=tk.HORIZONTAL,
-            variable=self.depth_level
+            variable=self.depth_level,
+            command=self.on_scale_change
         )
         self.depth_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
@@ -117,6 +118,12 @@ class DocumentSplitter:
             style="Accent.TButton"
         )
         self.split_button.pack(side=tk.RIGHT, padx=5)
+
+    def on_scale_change(self, value):
+        # Convert the float value to the nearest integer
+        new_value = round(float(value))
+        # Set the slider to the integer value
+        self.depth_level.set(new_value)
 
     def on_depth_change(self, *args):
         depth = self.depth_level.get()
@@ -272,7 +279,7 @@ class DocumentSplitter:
             
             # Create shorter project name
             base_name = os.path.splitext(os.path.basename(self.filename))[0]
-            base_name = base_name[:20]  # Limit base name length
+            base_name = base_name[:50]  # Increased length limit
             timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M')
             project_name = f"{base_name}_{timestamp}"
             output_folder = os.path.join(projects_dir, project_name)
@@ -325,7 +332,7 @@ class DocumentSplitter:
                     # Take first few words for the filename
                     words = clean_title.split()
                     short_title = '_'.join(words[:3])  # Take only first 3 words
-                    short_title = short_title[:30]  # Limit length
+                    short_title = short_title[:100]  # Increased length limit
                     
                     output_filename = os.path.join(output_folder, f"{idx:02d}_{short_title}.docx")
                     
