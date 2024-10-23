@@ -27,10 +27,10 @@ def setup_window(root):
     """Setup the main window properties"""
     root.title("Script Rabbit")
     # Set a minimum size for the window
-    root.minsize(800, 600)
+    root.minsize(1000, 800)
     # Center the window on the screen
     window_width = 1000
-    window_height = 700
+    window_height = 800
     screen_width = root.winfo_screenwidth()
     screen_height = root.winfo_screenheight()
     center_x = int(screen_width/2 - window_width/2)

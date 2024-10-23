@@ -54,18 +54,21 @@ class DocumentSplitter:
         depth_frame = ttk.LabelFrame(main_frame, text="Chapter Depth", padding="10")
         depth_frame.pack(fill=tk.X, padx=5, pady=5)
 
-        self.depth_level = tk.IntVar(value=1)
         depth_control_frame = ttk.Frame(depth_frame)
         depth_control_frame.pack(fill=tk.X, pady=5)
         
-        ttk.Label(depth_control_frame, text="Depth Level:").pack(side=tk.LEFT, padx=(0, 10))
+        self.depth_label = ttk.Label(depth_control_frame, text="Depth Level: 1")
+        self.depth_label.pack(side=tk.LEFT, padx=(0, 10))
+
+        self.depth_level = tk.IntVar(value=1)
+        self.depth_level.trace_add('write', self.on_depth_change)
+        
         self.depth_slider = ttk.Scale(
             depth_control_frame,
             from_=1,
             to=9,
             orient=tk.HORIZONTAL,
-            variable=self.depth_level,
-            command=self.update_tree
+            variable=self.depth_level
         )
         self.depth_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
         
@@ -96,8 +99,7 @@ class DocumentSplitter:
         self.delete_button = ttk.Button(
             button_frame,
             text="Delete Selected Chapters",
-            command=self.delete_selected,
-            style="Danger.TButton"
+            command=self.delete_selected
         )
         self.delete_button.pack(side=tk.LEFT, padx=5)
 
@@ -115,6 +117,11 @@ class DocumentSplitter:
             style="Accent.TButton"
         )
         self.split_button.pack(side=tk.RIGHT, padx=5)
+
+    def on_depth_change(self, *args):
+        depth = self.depth_level.get()
+        self.depth_label.config(text=f"Depth Level: {depth}")
+        self.update_tree()
 
     def upload_file(self):
         filetypes = [('Word Documents', '*.docx'), ('PDF Files', '*.pdf'), ('All files', '*.*')]
@@ -186,13 +193,29 @@ class DocumentSplitter:
             level = item['level']
             text = item['text']
             if level <= depth:
-                while level <= last_level:
+                while len(parent_stack) > level:
                     parent_stack.pop()
                     last_level -= 1
                 parent = parent_stack[-1]
                 current_node = self.tree.insert(parent, 'end', text=text)
-                parent_stack.append(current_node)
+                if len(parent_stack) <= level:
+                    parent_stack.append(current_node)
+                else:
+                    parent_stack[level] = current_node
                 last_level = level
+
+    def get_clean_title(self, title):
+        # Remove dots from any numbering at the start
+        parts = title.split()
+        if parts and any(c.isdigit() for c in parts[0]):
+            # Remove the numbering part and keep the rest
+            clean_title = ' '.join(parts[1:])
+        else:
+            clean_title = title
+            
+        # Remove any remaining dots and special characters
+        clean_title = ''.join(c for c in clean_title if c.isalnum() or c.isspace())
+        return clean_title
 
     def delete_selected(self):
         selected_items = self.tree.selection()
@@ -239,10 +262,26 @@ class DocumentSplitter:
         depth = self.depth_level.get()
         try:
             doc = Document(self.filename)
-            script_dir = os.path.dirname(os.path.abspath(__file__))
+            
+            # Create projects directory in the app folder
+            app_dir = os.path.dirname(os.path.abspath(__file__))
+            projects_dir = os.path.join(app_dir, "projects")
+            
+            if not os.path.exists(projects_dir):
+                os.makedirs(projects_dir)
+            
+            # Create shorter project name
             base_name = os.path.splitext(os.path.basename(self.filename))[0]
-            output_folder = os.path.join(script_dir, f"{base_name}_split_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}")
-            os.makedirs(output_folder)
+            base_name = base_name[:20]  # Limit base name length
+            timestamp = datetime.datetime.now().strftime('%Y%m%d_%H%M')
+            project_name = f"{base_name}_{timestamp}"
+            output_folder = os.path.join(projects_dir, project_name)
+            
+            try:
+                os.makedirs(output_folder, exist_ok=True)
+            except Exception as e:
+                messagebox.showerror("Error", f"Could not create project folder: {str(e)}")
+                return
 
             sections = []
             current_doc = None
@@ -277,16 +316,43 @@ class DocumentSplitter:
             if current_doc:
                 sections.append({'level': current_level, 'title': current_title, 'document': current_doc})
 
-            for idx, section in enumerate(sections):
-                title = section['title']
-                # Create a clean title by removing invalid characters and replacing spaces
-                clean_title = "".join(c for c in title if c.isalnum() or c.isspace())
-                clean_title = clean_title.replace(' ', '_')
-                output_filename = os.path.join(output_folder, f"{idx+1}_{clean_title}.docx")
-                section['document'].save(output_filename)
+            # Save the sections
+            for idx, section in enumerate(sections, 1):
+                try:
+                    title = section['title']
+                    clean_title = self.get_clean_title(title)
+                    
+                    # Take first few words for the filename
+                    words = clean_title.split()
+                    short_title = '_'.join(words[:3])  # Take only first 3 words
+                    short_title = short_title[:30]  # Limit length
+                    
+                    output_filename = os.path.join(output_folder, f"{idx:02d}_{short_title}.docx")
+                    
+                    # Fallback to simple numbered filename if path is too long
+                    if len(output_filename) > 240:
+                        output_filename = os.path.join(output_folder, f"{idx:02d}.docx")
+                    
+                    section['document'].save(output_filename)
+                    
+                except Exception as e:
+                    print(f"Error saving section {idx}: {str(e)}")
+                    # Try fallback filename
+                    try:
+                        fallback_filename = os.path.join(output_folder, f"{idx:02d}.docx")
+                        section['document'].save(fallback_filename)
+                    except Exception as fallback_error:
+                        print(f"Fallback save failed for section {idx}: {str(fallback_error)}")
+                        messagebox.showerror("Error", f"Failed to save section {idx}")
+                        continue
 
-            messagebox.showinfo("Success", f"Document split into {len(sections)} sections and saved in {output_folder}")
-            self.callback(output_folder)
+            if sections:
+                messagebox.showinfo("Success", f"Document split into {len(sections)} sections and saved in:\n{output_folder}")
+                self.callback(output_folder)
+            else:
+                messagebox.showwarning("Warning", "No sections were created during splitting.")
+                
         except Exception as e:
-            print(f"Error splitting document: {e}")
-            messagebox.showerror("Error", f"An error occurred while splitting the document: {str(e)}")
+            error_msg = f"An error occurred while splitting the document:\n{str(e)}"
+            print(error_msg)
+            messagebox.showerror("Error", error_msg)
