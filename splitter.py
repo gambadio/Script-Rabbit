@@ -1,5 +1,3 @@
-# splitter.py
-
 import tkinter as tk
 from tkinter import filedialog, ttk, messagebox
 import os
@@ -16,43 +14,107 @@ class DocumentSplitter:
         self.title_structure = []
         self.original_title_structure = []
         self.deleted_items = set()
+        
+        # Configure styles
+        style = ttk.Style()
+        
+        # Configure Treeview
+        style.configure(
+            "Custom.Treeview",
+            rowheight=25
+        )
+        
+        # Configure Treeview selection
+        style.map(
+            "Custom.Treeview",
+            background=[("selected", "#007acc")],
+            foreground=[("selected", "white")]
+        )
+        
         self.setup_ui()
 
     def setup_ui(self):
-        self.upload_button = tk.Button(self.master, text="Upload Word or PDF File", command=self.upload_file)
-        self.upload_button.pack(pady=10)
+        # Main container frame with padding
+        main_frame = ttk.Frame(self.master, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Upload section
+        upload_frame = ttk.LabelFrame(main_frame, text="Document Upload", padding="10")
+        upload_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.upload_button = ttk.Button(
+            upload_frame, 
+            text="Upload Word or PDF File",
+            command=self.upload_file,
+            style="Accent.TButton"
+        )
+        self.upload_button.pack(pady=(5, 10))
+
+        # Depth control section
+        depth_frame = ttk.LabelFrame(main_frame, text="Chapter Depth", padding="10")
+        depth_frame.pack(fill=tk.X, padx=5, pady=5)
 
         self.depth_level = tk.IntVar(value=1)
-        self.depth_slider = tk.Scale(self.master, from_=1, to=9, orient=tk.HORIZONTAL, label="Depth Level", 
-                                     variable=self.depth_level, command=self.update_tree)
-        self.depth_slider.pack(pady=10)
+        depth_control_frame = ttk.Frame(depth_frame)
+        depth_control_frame.pack(fill=tk.X, pady=5)
+        
+        ttk.Label(depth_control_frame, text="Depth Level:").pack(side=tk.LEFT, padx=(0, 10))
+        self.depth_slider = ttk.Scale(
+            depth_control_frame,
+            from_=1,
+            to=9,
+            orient=tk.HORIZONTAL,
+            variable=self.depth_level,
+            command=self.update_tree
+        )
+        self.depth_slider.pack(side=tk.LEFT, fill=tk.X, expand=True)
+        
+        # Tree section
+        tree_frame = ttk.LabelFrame(main_frame, text="Chapter Structure", padding="10")
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
 
-        # Create a frame for the tree and its scrollbar
-        tree_frame = ttk.Frame(self.master)
-        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
+        # Create tree with scrollbar
+        tree_container = ttk.Frame(tree_frame)
+        tree_container.pack(fill=tk.BOTH, expand=True)
 
-        # Create the tree with scrollbar
-        self.tree = ttk.Treeview(tree_frame)
+        self.tree = ttk.Treeview(
+            tree_container,
+            selectmode="extended",
+            style="Custom.Treeview"
+        )
         self.tree.heading("#0", text="Title Structure")
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
+        scrollbar = ttk.Scrollbar(tree_container, orient=tk.VERTICAL, command=self.tree.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.tree.configure(yscrollcommand=scrollbar.set)
 
-        # Create a frame for the buttons
-        button_frame = ttk.Frame(self.master)
-        button_frame.pack(fill=tk.X, padx=10, pady=5)
+        # Button section
+        button_frame = ttk.Frame(main_frame)
+        button_frame.pack(fill=tk.X, padx=5, pady=10)
 
-        # Add Delete and Reset buttons
-        self.delete_button = ttk.Button(button_frame, text="Delete Selected Chapters", command=self.delete_selected)
+        self.delete_button = ttk.Button(
+            button_frame,
+            text="Delete Selected Chapters",
+            command=self.delete_selected,
+            style="Danger.TButton"
+        )
         self.delete_button.pack(side=tk.LEFT, padx=5)
 
-        self.reset_button = ttk.Button(button_frame, text="Reset All Chapters", command=self.reset_chapters)
+        self.reset_button = ttk.Button(
+            button_frame,
+            text="Reset All Chapters",
+            command=self.reset_chapters
+        )
         self.reset_button.pack(side=tk.LEFT, padx=5)
 
-        self.split_button = tk.Button(self.master, text="Split Document and Save", command=self.split_document)
-        self.split_button.pack(pady=10)
+        self.split_button = ttk.Button(
+            button_frame,
+            text="Split Document and Save",
+            command=self.split_document,
+            style="Accent.TButton"
+        )
+        self.split_button.pack(side=tk.RIGHT, padx=5)
 
     def upload_file(self):
         filetypes = [('Word Documents', '*.docx'), ('PDF Files', '*.pdf'), ('All files', '*.*')]
