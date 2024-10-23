@@ -1,9 +1,13 @@
+# processor.py
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, simpledialog
 import os
 import json
 from anthropic import Anthropic
+from docx import Document
 from default_prompts import DEFAULT_PROMPTS
+import re
 
 class DocumentProcessor:
     def __init__(self, master):
@@ -11,6 +15,7 @@ class DocumentProcessor:
         self.anthropic = None
         self.prompts = DEFAULT_PROMPTS.copy()
         self.current_prompt = "Default"
+        self.file_paths = []
         self.load_saved_prompts()
         self.setup_ui()
 
@@ -27,7 +32,7 @@ class DocumentProcessor:
         file_frame = ttk.Frame(self.master)
         file_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.file_listbox = tk.Listbox(file_frame, width=70, height=10)
+        self.file_listbox = tk.Listbox(file_frame, width=70, height=10, selectmode=tk.EXTENDED)
         self.file_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
         scrollbar = ttk.Scrollbar(file_frame, orient=tk.VERTICAL, command=self.file_listbox.yview)
@@ -37,7 +42,6 @@ class DocumentProcessor:
         button_frame = ttk.Frame(self.master)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Button(button_frame, text="Add Files", command=self.add_files).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Remove Selected", command=self.remove_selected).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Process Files", command=self.process_files).pack(side=tk.LEFT, padx=5)
@@ -58,6 +62,35 @@ class DocumentProcessor:
         ttk.Label(prompt_frame, textvariable=self.current_prompt_var).pack(side=tk.LEFT, padx=(10, 0))
         ttk.Button(prompt_frame, text="Manage Prompts", command=self.manage_prompts).pack(side=tk.RIGHT)
 
+    def get_sort_key(self, filename):
+        """Create a sort key that handles both numbers and text correctly"""
+        base_name = os.path.splitext(filename)[0]  # Remove extension
+        # Split the string into numeric and non-numeric parts
+        parts = re.split('([0-9]+)', base_name)
+        # Convert numeric parts to integers for proper sorting
+        parts = [int(part) if part.isdigit() else part.lower() for part in parts]
+        return parts
+
+    def load_split_files(self, folder_path):
+        self.clear_all()
+        self.file_paths = []
+        
+        files = []
+        for filename in os.listdir(folder_path):
+            if filename.endswith('.docx'):
+                full_path = os.path.join(folder_path, filename)
+                files.append((self.get_sort_key(filename), full_path, filename))
+        
+        # Sort files using natural sorting
+        files.sort(key=lambda x: x[0])
+        
+        # Add sorted files to the listbox and store paths
+        for _, full_path, filename in files:
+            self.file_listbox.insert(tk.END, filename.replace('.docx', ''))
+            self.file_paths.append(full_path)
+        
+        self.output_folder.set(os.path.join(folder_path, 'processed'))
+
     def set_api_key(self):
         api_key = self.api_key_var.get()
         if api_key:
@@ -69,32 +102,28 @@ class DocumentProcessor:
         else:
             messagebox.showerror("API Key Error", "Please enter an API Key.")
 
-    def add_files(self):
-        files = filedialog.askopenfilenames(filetypes=[("Word Documents", "*.docx"), ("Text Files", "*.txt")])
-        for file in files:
-            self.file_listbox.insert(tk.END, file)
+    def browse_output_folder(self):
+        folder = filedialog.askdirectory()
+        if folder:
+            self.output_folder.set(folder)
 
     def remove_selected(self):
         selection = self.file_listbox.curselection()
         for index in reversed(selection):
             self.file_listbox.delete(index)
+            del self.file_paths[index]
 
     def clear_all(self):
         self.file_listbox.delete(0, tk.END)
-
-    def browse_output_folder(self):
-        folder = filedialog.askdirectory()
-        if folder:
-            self.output_folder.set(folder)
+        self.file_paths.clear()
 
     def process_files(self):
         if not self.anthropic:
             messagebox.showerror("Error", "Please set your Anthropic API Key first.")
             return
 
-        files = list(self.file_listbox.get(0, tk.END))
-        if not files:
-            messagebox.showerror("Error", "Please add files to process.")
+        if not self.file_paths:
+            messagebox.showerror("Error", "No files to process.")
             return
 
         output_folder = self.output_folder.get()
@@ -102,10 +131,12 @@ class DocumentProcessor:
             messagebox.showerror("Error", "Please select an output folder.")
             return
 
-        for file in files:
+        os.makedirs(output_folder, exist_ok=True)
+
+        for file_path in self.file_paths:
             try:
-                with open(file, 'r', encoding='utf-8') as f:
-                    content = f.read()
+                doc = Document(file_path)
+                content = "\n".join([para.text for para in doc.paragraphs])
                 
                 response = self.anthropic.messages.create(
                     model="claude-3-5-sonnet-20240620",
@@ -114,20 +145,42 @@ class DocumentProcessor:
                     system=self.prompts[self.current_prompt],
                     messages=[
                         {"role": "user", "content": f"Please process this content: {content}"}
-                    ],
-                    extra_headers={"anthropic-beta": "max-tokens-3-5-sonnet-2024-07-15"}
+                    ]
                 )
 
                 output_content = response.content[0].text if response.content else ""
                 
-                output_file = os.path.join(output_folder, f"processed_{os.path.basename(file)}.html")
+                # Maintain the same number prefix in output filename
+                original_filename = os.path.basename(file_path)
+                base_name = os.path.splitext(original_filename)[0]
+                output_file = os.path.join(output_folder, f"{base_name}.html")
+                
                 with open(output_file, 'w', encoding='utf-8') as f:
                     f.write(output_content)
 
             except Exception as e:
-                messagebox.showerror("Error", f"Error processing file {file}: {str(e)}")
+                messagebox.showerror("Error", f"Error processing file {file_path}: {str(e)}")
 
         messagebox.showinfo("Success", "All files processed successfully!")
+
+    def load_saved_prompts(self):
+        if os.path.exists("saved_prompts.json"):
+            try:
+                with open("saved_prompts.json", "r") as f:
+                    saved_prompts = json.load(f)
+                    for name, prompt in saved_prompts.items():
+                        if name not in DEFAULT_PROMPTS:
+                            self.prompts[name] = prompt
+            except Exception as e:
+                print(f"Error loading saved prompts: {e}")
+
+    def save_prompts(self):
+        save_dict = {k: v for k, v in self.prompts.items() if k not in DEFAULT_PROMPTS}
+        try:
+            with open("saved_prompts.json", "w") as f:
+                json.dump(save_dict, f)
+        except Exception as e:
+            print(f"Error saving prompts: {e}")
 
     def manage_prompts(self):
         prompt_manager = PromptManager(self.master, self.prompts, self.current_prompt)
@@ -137,18 +190,6 @@ class DocumentProcessor:
             self.current_prompt_var.set(self.current_prompt)
         self.save_prompts()
 
-    def load_saved_prompts(self):
-        if os.path.exists("saved_prompts.json"):
-            with open("saved_prompts.json", "r") as f:
-                saved_prompts = json.load(f)
-                for name, prompt in saved_prompts.items():
-                    if name not in DEFAULT_PROMPTS:
-                        self.prompts[name] = prompt
-
-    def save_prompts(self):
-        save_dict = {k: v for k, v in self.prompts.items() if k not in DEFAULT_PROMPTS}
-        with open("saved_prompts.json", "w") as f:
-            json.dump(save_dict, f)
 
 class PromptManager(tk.Toplevel):
     def __init__(self, parent, prompts, current_prompt):
@@ -169,7 +210,8 @@ class PromptManager(tk.Toplevel):
 
         ttk.Label(self.prompt_frame, text="Select Prompt:").pack(side=tk.LEFT)
         self.prompt_var = tk.StringVar(value=self.current_prompt)
-        self.prompt_combo = ttk.Combobox(self.prompt_frame, textvariable=self.prompt_var, values=list(self.prompts.keys()), state="readonly", width=40)
+        self.prompt_combo = ttk.Combobox(self.prompt_frame, textvariable=self.prompt_var, 
+                                       values=list(self.prompts.keys()), state="readonly", width=40)
         self.prompt_combo.pack(side=tk.LEFT, padx=(10, 0))
         self.prompt_combo.bind("<<ComboboxSelected>>", self.on_prompt_selected)
 
