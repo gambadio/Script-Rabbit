@@ -7,6 +7,7 @@ import datetime
 from docx import Document
 import win32com.client
 import pythoncom
+import uuid
 
 class DocumentSplitter:
     def __init__(self, master, callback):
@@ -27,15 +28,22 @@ class DocumentSplitter:
                                      variable=self.depth_level, command=self.update_tree)
         self.depth_slider.pack(pady=10)
 
+<<<<<<< HEAD
         # Create a frame for the tree and its scrollbar
         tree_frame = ttk.Frame(self.master)
         tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
 
         # Create the tree with scrollbar
+=======
+        tree_frame = ttk.Frame(self.master)
+        tree_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
+
+>>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
         self.tree = ttk.Treeview(tree_frame)
         self.tree.heading("#0", text="Title Structure")
         self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
+<<<<<<< HEAD
         scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL, command=self.tree.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.tree.configure(yscrollcommand=scrollbar.set)
@@ -50,6 +58,20 @@ class DocumentSplitter:
 
         self.reset_button = ttk.Button(button_frame, text="Reset All Chapters", command=self.reset_chapters)
         self.reset_button.pack(side=tk.LEFT, padx=5)
+=======
+        tree_scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.tree.yview)
+        tree_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        self.tree.configure(yscrollcommand=tree_scrollbar.set)
+
+        button_frame = ttk.Frame(self.master)
+        button_frame.pack(pady=10)
+
+        self.remove_button = tk.Button(button_frame, text="Remove Selected", command=self.remove_selected)
+        self.remove_button.pack(side=tk.LEFT, padx=5)
+
+        self.restore_button = tk.Button(button_frame, text="Restore All", command=self.restore_all)
+        self.restore_button.pack(side=tk.LEFT, padx=5)
+>>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
 
         self.split_button = tk.Button(self.master, text="Split Document and Save", command=self.split_document)
         self.split_button.pack(pady=10)
@@ -104,9 +126,13 @@ class DocumentSplitter:
                         level = int(style.replace('Heading ', ''))
                     except:
                         level = 1
+<<<<<<< HEAD
                     item = {'level': level, 'text': text}
                     self.title_structure.append(item)
                     self.original_title_structure.append(item.copy())
+=======
+                    self.title_structure.append({'level': level, 'text': text, 'include': True})
+>>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
 
             self.deleted_items = set()
             self.update_tree()
@@ -123,15 +149,18 @@ class DocumentSplitter:
         for item in self.title_structure:
             level = item['level']
             text = item['text']
+            include = item['include']
             if level <= depth:
                 while level <= last_level:
                     parent_stack.pop()
                     last_level -= 1
                 parent = parent_stack[-1]
-                current_node = self.tree.insert(parent, 'end', text=text)
+                tag = 'included' if include else 'excluded'
+                current_node = self.tree.insert(parent, 'end', text=text, tags=(tag,))
                 parent_stack.append(current_node)
                 last_level = level
 
+<<<<<<< HEAD
     def delete_selected(self):
         selected_items = self.tree.selection()
         if not selected_items:
@@ -164,6 +193,24 @@ class DocumentSplitter:
         self.deleted_items = set()
         self.update_tree()
         messagebox.showinfo("Success", "All chapters have been restored")
+=======
+        self.tree.tag_configure('excluded', foreground='gray')
+
+    def remove_selected(self):
+        selected_items = self.tree.selection()
+        for item in selected_items:
+            item_text = self.tree.item(item, 'text')
+            for title in self.title_structure:
+                if title['text'] == item_text:
+                    title['include'] = False
+                    break
+        self.update_tree()
+
+    def restore_all(self):
+        for title in self.title_structure:
+            title['include'] = True
+        self.update_tree()
+>>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
 
     def split_document(self):
         if not self.filename:
@@ -186,6 +233,8 @@ class DocumentSplitter:
             current_doc = None
             current_level = 0
             current_title = ""
+            include_content = False
+            included_titles = [item['text'] for item in self.title_structure if item['include']]
 
             for para in doc.paragraphs:
                 style = para.style.name
@@ -197,6 +246,7 @@ class DocumentSplitter:
                         except:
                             level = 1
                         
+<<<<<<< HEAD
                         if text in {item['text'] for item in self.title_structure}:
                             if level <= depth:
                                 if current_doc:
@@ -210,17 +260,38 @@ class DocumentSplitter:
                                     current_doc.add_paragraph(text, style=style)
                     else:
                         if current_doc:
+=======
+                        if level <= depth:
+                            if text in included_titles:
+                                if current_doc and include_content:
+                                    sections.append({'level': current_level, 'title': current_title, 'document': current_doc})
+                                current_doc = Document()
+                                current_level = level
+                                current_title = text
+                                include_content = True
+                            else:
+                                include_content = False
+                        
+                        if include_content:
+>>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
                             current_doc.add_paragraph(text, style=style)
+                    elif include_content and current_doc:
+                        current_doc.add_paragraph(text, style=style)
 
-            if current_doc:
+            if current_doc and include_content:
                 sections.append({'level': current_level, 'title': current_title, 'document': current_doc})
 
             for idx, section in enumerate(sections):
                 title = section['title']
+<<<<<<< HEAD
                 # Create a clean title by removing invalid characters and replacing spaces
                 clean_title = "".join(c for c in title if c.isalnum() or c.isspace())
                 clean_title = clean_title.replace(' ', '_')
                 output_filename = os.path.join(output_folder, f"{idx+1}_{clean_title}.docx")
+=======
+                unique_id = str(uuid.uuid4())[:8]
+                output_filename = os.path.join(output_folder, f"{idx+1}_{unique_id}.docx")
+>>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
                 section['document'].save(output_filename)
 
             messagebox.showinfo("Success", f"Document split into {len(sections)} sections and saved in {output_folder}")
