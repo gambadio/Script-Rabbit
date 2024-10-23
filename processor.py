@@ -7,10 +7,6 @@ import json
 from anthropic import Anthropic
 from docx import Document
 from default_prompts import DEFAULT_PROMPTS
-<<<<<<< HEAD
-=======
-from docx import Document
->>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
 import re
 
 class DocumentProcessor:
@@ -46,14 +42,8 @@ class DocumentProcessor:
         button_frame = ttk.Frame(self.master)
         button_frame.pack(fill=tk.X, padx=10, pady=10)
 
-<<<<<<< HEAD
-=======
-        ttk.Button(button_frame, text="Upload Files", command=self.upload_files).pack(side=tk.LEFT, padx=5)
->>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
         ttk.Button(button_frame, text="Remove Selected", command=self.remove_selected).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Move Up", command=self.move_up).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Move Down", command=self.move_down).pack(side=tk.LEFT, padx=5)
         ttk.Button(button_frame, text="Process Files", command=self.process_files).pack(side=tk.LEFT, padx=5)
 
         output_frame = ttk.Frame(self.master)
@@ -112,58 +102,10 @@ class DocumentProcessor:
         else:
             messagebox.showerror("API Key Error", "Please enter an API Key.")
 
-<<<<<<< HEAD
     def browse_output_folder(self):
         folder = filedialog.askdirectory()
         if folder:
             self.output_folder.set(folder)
-=======
-    def upload_files(self):
-        files = filedialog.askopenfilenames(filetypes=[("Word Documents", "*.docx")])
-        for file in files:
-            self.file_listbox.insert(tk.END, file)
-        self.sort_files()
-
-    def sort_files(self):
-        files = list(self.file_listbox.get(0, tk.END))
-        sorted_files = sorted(files, key=self.extract_number)
-        self.clear_all()
-        for file in sorted_files:
-            self.file_listbox.insert(tk.END, file)
-
-    def extract_number(self, filename):
-        match = re.search(r'^\d+', os.path.basename(filename))
-        return int(match.group()) if match else float('inf')
-
-    def move_up(self):
-        selected_indices = self.file_listbox.curselection()
-        if not selected_indices or selected_indices[0] == 0:
-            return
-        for index in selected_indices:
-            text = self.file_listbox.get(index)
-            self.file_listbox.delete(index)
-            self.file_listbox.insert(index-1, text)
-            self.file_listbox.selection_set(index-1)
-
-    def move_down(self):
-        selected_indices = self.file_listbox.curselection()
-        if not selected_indices or selected_indices[-1] == self.file_listbox.size()-1:
-            return
-        for index in reversed(selected_indices):
-            text = self.file_listbox.get(index)
-            self.file_listbox.delete(index)
-            self.file_listbox.insert(index+1, text)
-            self.file_listbox.selection_set(index+1)
-
-    def load_split_files(self, folder_path):
-        self.clear_all()
-        for filename in os.listdir(folder_path):
-            if filename.endswith('.docx'):
-                full_path = os.path.join(folder_path, filename)
-                self.file_listbox.insert(tk.END, full_path)
-        self.sort_files()
-        self.output_folder.set(os.path.join(folder_path, 'processed'))
->>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
 
     def remove_selected(self):
         selection = self.file_listbox.curselection()
@@ -180,12 +122,7 @@ class DocumentProcessor:
             messagebox.showerror("Error", "Please set your Anthropic API Key first.")
             return
 
-<<<<<<< HEAD
         if not self.file_paths:
-=======
-        files = list(self.file_listbox.get(0, tk.END))
-        if not files:
->>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
             messagebox.showerror("Error", "No files to process.")
             return
 
@@ -196,15 +133,9 @@ class DocumentProcessor:
 
         os.makedirs(output_folder, exist_ok=True)
 
-<<<<<<< HEAD
         for file_path in self.file_paths:
             try:
                 doc = Document(file_path)
-=======
-        for file in files:
-            try:
-                doc = Document(file)
->>>>>>> 42ee872e977f4a403145d05db727d2f069d99337
                 content = "\n".join([para.text for para in doc.paragraphs])
                 
                 response = self.anthropic.messages.create(
