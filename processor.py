@@ -8,6 +8,8 @@ from anthropic import Anthropic
 from docx import Document
 from default_prompts import DEFAULT_PROMPTS
 import re
+from cryptography.fernet import Fernet
+import base64
 
 class DocumentProcessor:
     def __init__(self, master):
@@ -16,36 +18,106 @@ class DocumentProcessor:
         self.prompts = DEFAULT_PROMPTS.copy()
         self.current_prompt = "Academic_Content_Formatter"
         self.file_paths = []
-        self.load_saved_prompts()
+        
+        # Create StringVar before setup_ui
+        self.api_key_var = tk.StringVar()
+        self.api_status_var = tk.StringVar(value="API Key: Not Set")
+        
+        self.encryption_key = self.get_or_create_key()
         self.setup_ui()
+        
+        # Load saved data after UI is setup
+        self.load_saved_prompts()
+        self.load_saved_api_key()
+
+    def get_or_create_key(self):
+        key_file = "encryption.key"
+        if os.path.exists(key_file):
+            with open(key_file, "rb") as f:
+                return f.read()
+        else:
+            key = Fernet.generate_key()
+            with open(key_file, "wb") as f:
+                f.write(key)
+            return key
+
+    def encrypt_api_key(self, api_key):
+        f = Fernet(self.encryption_key)
+        return f.encrypt(api_key.encode()).decode()
+
+    def decrypt_api_key(self, encrypted_api_key):
+        f = Fernet(self.encryption_key)
+        return f.decrypt(encrypted_api_key.encode()).decode()
+
+    def save_api_key(self, api_key):
+        encrypted_key = self.encrypt_api_key(api_key)
+        config = {}
+        
+        if os.path.exists("config.json"):
+            with open("config.json", "r") as f:
+                config = json.load(f)
+        
+        config["api_key"] = encrypted_key
+        
+        with open("config.json", "w") as f:
+            json.dump(config, f)
+
+    def load_saved_api_key(self):
+        try:
+            if os.path.exists("config.json"):
+                with open("config.json", "r") as f:
+                    config = json.load(f)
+                    if "api_key" in config:
+                        decrypted_key = self.decrypt_api_key(config["api_key"])
+                        self.api_key_var.set(decrypted_key)
+                        self.set_api_key(silent=True)
+                        self.api_status_var.set("API Key: Set")
+        except Exception as e:
+            print(f"Error loading API key: {e}")
+            self.api_status_var.set("API Key: Error Loading")
 
     def setup_ui(self):
+        # API Frame
         api_frame = ttk.Frame(self.master)
         api_frame.pack(fill=tk.X, padx=10, pady=10)
 
         ttk.Label(api_frame, text="Anthropic API Key:").pack(side=tk.LEFT)
-        self.api_key_var = tk.StringVar()
         self.api_key_entry = ttk.Entry(api_frame, textvariable=self.api_key_var, width=40, show="*")
         self.api_key_entry.pack(side=tk.LEFT, padx=(10, 0))
         ttk.Button(api_frame, text="Set API Key", command=self.set_api_key).pack(side=tk.LEFT, padx=(10, 0))
+        ttk.Label(api_frame, textvariable=self.api_status_var).pack(side=tk.LEFT, padx=(10, 0))
 
+        # File Frame
         file_frame = ttk.Frame(self.master)
         file_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
 
-        self.file_listbox = tk.Listbox(file_frame, width=70, height=10, selectmode=tk.EXTENDED)
+        # Upload Buttons Frame
+        button_frame = ttk.Frame(file_frame)
+        button_frame.pack(fill=tk.X, pady=(0, 5))
+
+        ttk.Button(button_frame, text="Upload DOCX Files", 
+                  command=self.upload_files).pack(side=tk.LEFT, padx=5)
+
+        # Listbox with Scrollbar
+        listbox_frame = ttk.Frame(file_frame)
+        listbox_frame.pack(fill=tk.BOTH, expand=True)
+
+        self.file_listbox = tk.Listbox(listbox_frame, width=70, height=10, selectmode=tk.EXTENDED)
         self.file_listbox.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
 
-        scrollbar = ttk.Scrollbar(file_frame, orient=tk.VERTICAL, command=self.file_listbox.yview)
+        scrollbar = ttk.Scrollbar(listbox_frame, orient=tk.VERTICAL, command=self.file_listbox.yview)
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         self.file_listbox.config(yscrollcommand=scrollbar.set)
 
-        button_frame = ttk.Frame(self.master)
-        button_frame.pack(fill=tk.X, padx=10, pady=10)
+        # Control Buttons Frame
+        control_frame = ttk.Frame(self.master)
+        control_frame.pack(fill=tk.X, padx=10, pady=10)
 
-        ttk.Button(button_frame, text="Remove Selected", command=self.remove_selected).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
-        ttk.Button(button_frame, text="Process Files", command=self.process_files).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Remove Selected", command=self.remove_selected).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Clear All", command=self.clear_all).pack(side=tk.LEFT, padx=5)
+        ttk.Button(control_frame, text="Process Files", command=self.process_files).pack(side=tk.LEFT, padx=5)
 
+        # Output Frame
         output_frame = ttk.Frame(self.master)
         output_frame.pack(fill=tk.X, padx=10, pady=10)
 
@@ -54,6 +126,7 @@ class DocumentProcessor:
         ttk.Entry(output_frame, textvariable=self.output_folder, width=40).pack(side=tk.LEFT, padx=(10, 0))
         ttk.Button(output_frame, text="Browse", command=self.browse_output_folder).pack(side=tk.LEFT, padx=(10, 0))
 
+        # Prompt Frame
         prompt_frame = ttk.Frame(self.master)
         prompt_frame.pack(fill=tk.X, padx=10, pady=10)
 
@@ -62,14 +135,30 @@ class DocumentProcessor:
         ttk.Label(prompt_frame, textvariable=self.current_prompt_var).pack(side=tk.LEFT, padx=(10, 0))
         ttk.Button(prompt_frame, text="Manage Prompts", command=self.manage_prompts).pack(side=tk.RIGHT)
 
-    def get_sort_key(self, filename):
-        """Create a sort key that handles both numbers and text correctly"""
-        base_name = os.path.splitext(filename)[0]  # Remove extension
-        # Split the string into numeric and non-numeric parts
-        parts = re.split('([0-9]+)', base_name)
-        # Convert numeric parts to integers for proper sorting
-        parts = [int(part) if part.isdigit() else part.lower() for part in parts]
-        return parts
+    def set_api_key(self, silent=False):
+        api_key = self.api_key_var.get()
+        if api_key:
+            try:
+                self.anthropic = Anthropic(api_key=api_key)
+                if not silent:
+                    messagebox.showinfo("API Key", "API Key set successfully!")
+                self.save_api_key(api_key)
+                self.api_status_var.set("API Key: Set")
+            except Exception as e:
+                if not silent:
+                    messagebox.showerror("API Key Error", f"Error setting API Key: {str(e)}")
+                self.api_status_var.set("API Key: Error")
+        else:
+            if not silent:
+                messagebox.showerror("API Key Error", "Please enter an API Key.")
+            self.api_status_var.set("API Key: Not Set")
+
+    def upload_files(self):
+        files = filedialog.askopenfilenames(filetypes=[('Word Documents', '*.docx')])
+        for file in files:
+            if file not in self.file_paths:
+                self.file_paths.append(file)
+                self.file_listbox.insert(tk.END, os.path.basename(file))
 
     def load_split_files(self, folder_path):
         self.clear_all()
@@ -81,26 +170,19 @@ class DocumentProcessor:
                 full_path = os.path.join(folder_path, filename)
                 files.append((self.get_sort_key(filename), full_path, filename))
         
-        # Sort files using natural sorting
         files.sort(key=lambda x: x[0])
         
-        # Add sorted files to the listbox and store paths
         for _, full_path, filename in files:
             self.file_listbox.insert(tk.END, filename.replace('.docx', ''))
             self.file_paths.append(full_path)
         
         self.output_folder.set(os.path.join(folder_path, 'processed'))
 
-    def set_api_key(self):
-        api_key = self.api_key_var.get()
-        if api_key:
-            try:
-                self.anthropic = Anthropic(api_key=api_key)
-                messagebox.showinfo("API Key", "API Key set successfully!")
-            except Exception as e:
-                messagebox.showerror("API Key Error", f"Error setting API Key: {str(e)}")
-        else:
-            messagebox.showerror("API Key Error", "Please enter an API Key.")
+    def get_sort_key(self, filename):
+        base_name = os.path.splitext(filename)[0]
+        parts = re.split('([0-9]+)', base_name)
+        parts = [int(part) if part.isdigit() else part.lower() for part in parts]
+        return parts
 
     def browse_output_folder(self):
         folder = filedialog.askdirectory()
@@ -139,7 +221,7 @@ class DocumentProcessor:
                 content = "\n".join([para.text for para in doc.paragraphs])
                 
                 response = self.anthropic.messages.create(
-                    model="claude-3-5-sonnet-20240620",
+                    model="claude-3-5-sonnet-20241022",
                     max_tokens=8000,
                     temperature=0.7,
                     system=self.prompts[self.current_prompt],
@@ -150,7 +232,6 @@ class DocumentProcessor:
 
                 output_content = response.content[0].text if response.content else ""
                 
-                # Maintain the same number prefix in output filename
                 original_filename = os.path.basename(file_path)
                 base_name = os.path.splitext(original_filename)[0]
                 output_file = os.path.join(output_folder, f"{base_name}.html")
@@ -199,9 +280,9 @@ class PromptManager(tk.Toplevel):
         self.current_prompt = current_prompt
         self.result = None
 
-        self.transient(parent)  # Set parent-child relationship
-        self.grab_set()         # Make window modal
-        self.attributes('-topmost', True)  # Keep window on top
+        self.transient(parent)
+        self.grab_set()
+        self.attributes('-topmost', True)
 
         self.title("Prompt Manager")
         self.geometry("700x500")
@@ -296,3 +377,4 @@ class PromptManager(tk.Toplevel):
     def close(self):
         self.result = self.prompt_var.get()
         self.destroy()
+
