@@ -10,6 +10,9 @@ from default_prompts import DEFAULT_PROMPTS
 import re
 from cryptography.fernet import Fernet
 import base64
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
 
 class DocumentProcessor:
     def __init__(self, master):
@@ -18,6 +21,7 @@ class DocumentProcessor:
         self.prompts = DEFAULT_PROMPTS.copy()
         self.current_prompt = "Academic_Content_Formatter"
         self.file_paths = []
+        self.last_output_folder = None
         
         # Create StringVar before setup_ui
         self.api_key_var = tk.StringVar()
@@ -199,6 +203,16 @@ class DocumentProcessor:
         self.file_listbox.delete(0, tk.END)
         self.file_paths.clear()
 
+    def get_next_folder_name(self, base_path):
+        """Get the next available 'processed_n' folder name"""
+        if not os.path.exists(os.path.join(base_path, "processed")):
+            return "processed"
+        
+        i = 2
+        while os.path.exists(os.path.join(base_path, f"processed_{i}")):
+            i += 1
+        return f"processed_{i}"
+
     def process_files(self):
         if not self.anthropic:
             messagebox.showerror("Error", "Please set your Anthropic API Key first.")
@@ -208,13 +222,22 @@ class DocumentProcessor:
             messagebox.showerror("Error", "No files to process.")
             return
 
-        output_folder = self.output_folder.get()
-        if not output_folder:
+        base_folder = self.output_folder.get()
+        if not base_folder:
             messagebox.showerror("Error", "Please select an output folder.")
             return
 
-        os.makedirs(output_folder, exist_ok=True)
+        # Determine output folder name
+        output_folder_name = self.get_next_folder_name(base_folder)
+        output_folder = os.path.join(base_folder, output_folder_name)
+        
+        try:
+            os.makedirs(output_folder, exist_ok=True)
+        except Exception as e:
+            messagebox.showerror("Error", f"Could not create output folder: {str(e)}")
+            return
 
+        processed_files = []
         for file_path in self.file_paths:
             try:
                 doc = Document(file_path)
@@ -238,11 +261,17 @@ class DocumentProcessor:
                 
                 with open(output_file, 'w', encoding='utf-8') as f:
                     f.write(output_content)
+                
+                processed_files.append(output_file)
 
             except Exception as e:
                 messagebox.showerror("Error", f"Error processing file {file_path}: {str(e)}")
 
-        messagebox.showinfo("Success", "All files processed successfully!")
+        if processed_files:
+            self.last_output_folder = output_folder
+            messagebox.showinfo("Success", f"All files processed successfully in folder:\n{output_folder}")
+        else:
+            messagebox.showwarning("Warning", "No files were processed successfully.")
 
     def load_saved_prompts(self):
         if os.path.exists("saved_prompts.json"):
@@ -304,6 +333,7 @@ class PromptManager(tk.Toplevel):
         self.button_frame.pack(pady=10, padx=10, fill=tk.X)
 
         ttk.Button(self.button_frame, text="New Prompt", command=self.new_prompt).pack(side=tk.LEFT, padx=5)
+        ttk.Button(self.button_frame, text="Save Changes", command=self.save_changes).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.button_frame, text="Save Changes", command=self.save_changes).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.button_frame, text="Delete Prompt", command=self.delete_prompt).pack(side=tk.LEFT, padx=5)
         ttk.Button(self.button_frame, text="Close", command=self.close).pack(side=tk.RIGHT, padx=5)
