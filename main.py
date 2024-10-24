@@ -9,7 +9,7 @@ import pywinstyles
 def apply_theme_to_titlebar(root):
     """Apply theme to the window title bar (Windows only)"""
     if sys.platform != "win32":
-        return
+        return  
         
     version = sys.getwindowsversion()
 
@@ -38,6 +38,10 @@ def setup_window(root):
     root.geometry(f'{window_width}x{window_height}+{center_x}+{center_y}')
 
 if __name__ == "__main__":
+    # Clear any temporary data from previous sessions
+    from temp_data import clear_temp_data
+    
+    clear_temp_data()
     # Create the main window
     root = tk.Tk()
     

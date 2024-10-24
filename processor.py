@@ -268,6 +268,9 @@ class DocumentProcessor:
 
         if processed_files:
             self.last_output_folder = output_folder
+            # Add this line to save the last batch info
+            from temp_data import save_last_batch
+            save_last_batch(output_folder)
             messagebox.showinfo("Success", f"All files processed successfully in folder:\n{output_folder}")
         else:
             messagebox.showwarning("Warning", "No files were processed successfully.")

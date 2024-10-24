@@ -15,7 +15,8 @@ class DocumentMerger:
         self.master = master
         self.files = []
         self.setup_ui()
-        # Auto-load will now happen when switching to the merger tab
+        self.auto_load_last_processed()  # Call it immediately after setup
+
 
     def setup_ui(self):
         file_frame = ttk.Frame(self.master)
@@ -38,16 +39,15 @@ class DocumentMerger:
 
     def auto_load_last_processed(self):
         try:
-            # Get reference to the processor instance through the notebook
-            notebook = self.master.master
-            processor = notebook.children['!frame2'].children['!documentprocessor']
+            from temp_data import get_last_batch
+            last_batch_folder = get_last_batch()
             
-            if processor and processor.last_output_folder and os.path.exists(processor.last_output_folder):
+            if last_batch_folder and os.path.exists(last_batch_folder):
                 self.clear_all()
                 files = []
-                for filename in os.listdir(processor.last_output_folder):
+                for filename in os.listdir(last_batch_folder):
                     if filename.endswith('.html'):
-                        full_path = os.path.join(processor.last_output_folder, filename)
+                        full_path = os.path.join(last_batch_folder, filename)
                         files.append((self.get_sort_key(filename), full_path))
                 
                 # Sort files naturally

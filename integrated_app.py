@@ -1,3 +1,5 @@
+# integrated_app.py
+
 import tkinter as tk
 from tkinter import ttk
 import os
@@ -25,6 +27,14 @@ class IntegratedApp:
         self.splitter = DocumentSplitter(self.splitter_frame, self.on_split_complete)
         self.processor = DocumentProcessor(self.processor_frame)
         self.merger = DocumentMerger(self.merger_frame)
+
+        # Add this: Bind tab change event
+        self.notebook.bind("<<NotebookTabChanged>>", self.on_tab_changed)
+
+    def on_tab_changed(self, event):
+        # When switching to merger tab, attempt to load last processed files
+        if self.notebook.select() == str(self.merger_frame):
+            self.merger.auto_load_last_processed()
 
     def on_split_complete(self, output_folder):
         self.processor.load_split_files(output_folder)
