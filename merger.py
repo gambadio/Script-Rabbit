@@ -1,3 +1,5 @@
+# merger.py
+
 import tkinter as tk
 from tkinter import ttk, filedialog, messagebox
 import os
@@ -13,7 +15,7 @@ class DocumentMerger:
         self.master = master
         self.files = []
         self.setup_ui()
-        self.auto_load_last_processed()
+        # Auto-load will now happen when switching to the merger tab
 
     def setup_ui(self):
         file_frame = ttk.Frame(self.master)
@@ -36,8 +38,10 @@ class DocumentMerger:
 
     def auto_load_last_processed(self):
         try:
-            # Get reference to the processor instance through the main app
-            processor = self.master.master.processor
+            # Get reference to the processor instance through the notebook
+            notebook = self.master.master
+            processor = notebook.children['!frame2'].children['!documentprocessor']
+            
             if processor and processor.last_output_folder and os.path.exists(processor.last_output_folder):
                 self.clear_all()
                 files = []

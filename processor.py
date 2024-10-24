@@ -227,9 +227,8 @@ class DocumentProcessor:
             messagebox.showerror("Error", "Please select an output folder.")
             return
 
-        # Determine output folder name
-        output_folder_name = self.get_next_folder_name(base_folder)
-        output_folder = os.path.join(base_folder, output_folder_name)
+        # Create single processed folder
+        output_folder = os.path.join(os.path.dirname(base_folder), "processed")
         
         try:
             os.makedirs(output_folder, exist_ok=True)
